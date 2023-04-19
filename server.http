@@ -1,0 +1,56 @@
+POST http://localhost:5000/sendMail
+Content-Type: application/json
+
+{"email":"ravi.sabbi@recykal.com"}
+
+ 
+
+###
+POST http://localhost:5000/user
+Content-Type: application/json
+
+{   
+    "firstName":"ravi",
+    "lastName":"sabbi",
+    "userName":"ravisabbi",
+    "email":"ravisabbi@gmail.com",
+    "password":"12345",
+    "role":"user",
+    "action": true
+}
+
+###
+POST http://localhost:5000/login
+Content-Type: application/json
+
+{
+    "userName":"ravisabbi",
+    "password":"Ravi@123"
+}
+
+###
+GET http://localhost:5000/getUsers
+
+
+###  
+PATCH http://localhost:5000/restrictUser
+Content-Type: application/json
+
+{
+    "id":"1",
+    "action":false
+}
+
+
+###
+GET http://localhost:5000/getUserData
+
+### get all surveys
+GET http://localhost:5000/usersurveys/3
+
+### get surveys count and last 5'days data
+GET http://localhost:5000/getUserSurveysData/3
+
+
+
+
