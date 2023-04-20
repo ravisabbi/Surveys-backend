@@ -120,8 +120,9 @@ app.post("/login", (request, response) => {
         } else {
           const payload = { userName };
           const jwt_token = jwt.sign(payload, "ravisabbi");
+          user_details = {...user[0],action:user[0].action?.data?.readUInt8(0)===1}
           response.status(200);
-          response.send({ jwt_token, user_details: user[0] });
+          response.send({ jwt_token, user_details});
         }
       } else {
         response.status(404).send({ msg: "User not found" });
@@ -174,13 +175,14 @@ app.get("/getUsers", (req, res) => {
   const role = "user";
 
   db.query(
-    "SELECT id,firstname,lastname,email,action,role FROM user WHERE role = ?",
+    "SELECT id,firstname,lastname,username,email,action,role FROM user WHERE role = ?",
     [role],
     (error, result) => {
       if (error) {
         res.status(400).send(error);
       } else {
-        res.status(200).send(result);
+        const mappedResult = result.map((row) => ({...row,action: row.action?.data?.readUInt8(0) === 1}))
+        res.status(200).send(mappedResult);
       }
     }
   );
@@ -214,8 +216,8 @@ app.get("/getUserData", (req, res) => {
                    WHERE role = "user"
                    group by user.username`;
   const activeInactiveQuery = `SELECT
-                                (SELECT COUNT(*) FROM user WHERE action = 1 AND role = "user") as active_users,
-                                (SELECT COUNT(*) FROM user WHERE action = 0 AND role = "user") as inactive_users`;
+                                (SELECT COUNT(*) FROM user WHERE action = ${true} AND role = "user") as active_users,
+                                (SELECT COUNT(*) FROM user WHERE action = ${false} AND role = "user") as inactive_users`;
   db.query(userDataQuery, (error, result) => {
     if (error) {
       res.status(400).send(error);
@@ -242,7 +244,8 @@ app.get("/usersurveys/:id", (req, res) => {
   db.query(get_all_surveys_Query, (error, result) => {
     if (error) res.status(400).send(error);
     else {
-      res.status(200).send(result);
+      const updated_result =result.map((row) => ({...row,status: row.status?.data?.readUInt8(0) === 1}));
+      res.status(200).send(updated_result);
     }
   });
 });
@@ -261,8 +264,8 @@ app.get("/getUserSurveysData/:id", (req, res) => {
   console.log(startDate);
 
   const completedAndInCompletedQurey = `SELECT
-  COUNT(CASE WHEN status = 1 THEN 1 ELSE NULL END) as no_of_completed,
-  COUNT(CASE WHEN status = 0 THEN 1 ELSE NULL END) as no_of_incompleted
+  COUNT(CASE WHEN status = true THEN 1 ELSE NULL END) as no_of_completed,
+  COUNT(CASE WHEN status = false THEN 1 ELSE NULL END) as no_of_incompleted
 FROM
   userSurvey
 WHERE user_id=?
