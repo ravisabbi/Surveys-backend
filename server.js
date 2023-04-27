@@ -8,6 +8,7 @@ const mysql = require("mysql2");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const app = express();
+const cors = require("cors");
 app.use(express.json());
 require("dotenv").config();
 
@@ -26,6 +27,7 @@ const initializeDb = () => {
   }
 };
 
+app.use(cors());
 // initializeDb();
 
 app.listen(5000, () => {
@@ -55,7 +57,6 @@ const authenticateToken = (request, response, next) => {
 //REGISTRATION OF USER API
 
 app.post("/user", (request, response) => {
-  //console.log(request.body);
   const { firstName, lastName, userName, email, password, action, role } =
     request.body;
 
@@ -96,7 +97,6 @@ app.post("/user", (request, response) => {
 });
 
 //Login API
-
 app.post("/login", (request, response) => {
   const { userName, password } = request.body;
   console.log(request.body);
@@ -114,16 +114,26 @@ app.post("/login", (request, response) => {
           user[0].password
         );
         //  console.log(is_password_matched)
+        console.log(!(user[0]?.action.readInt8()===1))
+        if(!(user[0]?.action.readInt8()===1)){
+              response.status(400).send({msg:"Your acceess denied"})
+        }
+        else{
         if (!is_password_matched) {
           response.status(401);
           response.send({ msg: "Invalid Password" });
         } else {
           const payload = { userName };
           const jwt_token = jwt.sign(payload, "ravisabbi");
-          user_details = {...user[0],action:user[0].action?.data?.readUInt8(0)===1}
+          user_details = {
+            ...user[0],
+            action: user[0]?.action.readUInt8() === 1,
+          };
+          delete user_details["password"];
           response.status(200);
-          response.send({ jwt_token, user_details});
+          response.send({ jwt_token, user_details });
         }
+      }
       } else {
         response.status(404).send({ msg: "User not found" });
       }
@@ -172,16 +182,25 @@ app.post("/sendmail", (req, res) => {
 // GET ALL USERS
 
 app.get("/getUsers", (req, res) => {
+  const { search_result = "" } = req.query;
+  console.log('search',search_result);
   const role = "user";
 
   db.query(
-    "SELECT id,firstname,lastname,username,email,action,role FROM user WHERE role = ?",
-    [role],
+    `SELECT id,firstname,lastname,username,email,action,role FROM user WHERE role = ? AND LOWER(username) LIKE ?`,
+    [role, `%${search_result.toLocaleLowerCase()}%`],
     (error, result) => {
       if (error) {
         res.status(400).send(error);
       } else {
-        const mappedResult = result.map((row) => ({...row,action: row.action?.data?.readUInt8(0) === 1}))
+        result.map((row) => {
+          console.log(row?.action.readInt8() == 1);
+        });
+         
+        const mappedResult = result.map((row) => ({
+          ...row,
+          action: row?.action.readInt8() == 1,
+        }));
         res.status(200).send(mappedResult);
       }
     }
@@ -238,13 +257,18 @@ app.get("/getUserData", (req, res) => {
 });
 
 //get all surveys API
-app.get("/usersurveys/:id", (req, res) => {
+app.get("/userSurveys/:id", (req, res) => {
   const { id } = req.params;
-  const get_all_surveys_Query = `SELECT * FROM userSurvey WHERE user_id = ${id}`;
-  db.query(get_all_surveys_Query, (error, result) => {
+  const {search_result = ""} = req.query;
+  const get_all_surveys_Query = `SELECT * FROM userSurvey WHERE user_id = ${id} AND LOWER(email) LIKE ?`;
+  db.query(get_all_surveys_Query,[`%${search_result.toLocaleLowerCase()}%`], (error, result) => {
     if (error) res.status(400).send(error);
     else {
-      const updated_result =result.map((row) => ({...row,status: row.status?.data?.readUInt8(0) === 1}));
+      const updated_result = result.map((row) => ({
+        ...row,
+        survey_date:row.survey_date.toLocaleDateString("en-GB"),
+        status: row.status?.readUInt8() === 1,
+      }));
       res.status(200).send(updated_result);
     }
   });
@@ -285,20 +309,115 @@ GROUP BY
   db.query(userSurveyQuery, [id, startDate], (error, result) => {
     if (error) res.status(400).send(error);
     else {
-      //res.send(result);
-      console.log(result);
+      const formattedData = result.map((eachItem) => ({
+        ...eachItem,
+        survey_date: eachItem.survey_date.toLocaleDateString("en-GB"),
+      }));
+      console.log(formattedData);
       db.query(completedAndInCompletedQurey, [id], (err, counts) => {
         if (err) res.status(400).send(err);
         else {
-          const resData = [
-            {
-              status_count: counts,
-              data: result,
-            },
-          ];
+          const { no_of_completed, no_of_incompleted } = counts[0];
+          const resData = {
+            status_count: { no_of_completed, no_of_incompleted },
+            user_survey_list: formattedData,
+          };
+
           res.status(200).send(resData);
         }
       });
     }
   });
 });
+
+//Send Survey via Mail
+app.post("/survey", (req, res) => {
+  const { email, user_id } = req.body;
+  console.log(req.body);
+  const date = new Date();
+  const status = false;
+        db.query(
+          "INSERT INTO userSurvey(user_id,email,survey_date,status) VALUES (?,?,?,?)",
+          [user_id, email, date, status],
+          (error, result) => {
+            if (error) res.send(error);
+            else {
+              console.log(result.insertId);
+              try {
+                const transporter = nodemailer.createTransport({
+                  service: "gmail",
+                  auth: {
+                    user: process.env.EMAIL,
+                    pass: process.env.PASSWORD,
+                  },
+                });
+      
+                const mailOptions = {
+                  from: "ravisabbi7036@gmail.com",
+                  to: email,
+                  subject: "Please complete your survey",
+                  text: `http://localhost:3000/surveyForm/${result.insertId}`,
+                };
+      
+                transporter.sendMail(mailOptions, (error, info) => {
+                  if (error) {
+                    res.staus(400).send(error);
+                  } else {
+                    res.status(200).send("Survey sent successfully");
+                  }
+                });
+              } catch (e) {
+                res.status(400).send(e);
+              }
+            }
+          }
+        );  
+});
+
+//submiting form and updating status
+app.patch("/submitSurveyForm", (req, res) => {
+  const { survey_id } = req.body;
+  console.log(req.body);
+  db.query(
+    `UPDATE userSurvey SET status=? WHERE id = ?`,
+    [true, survey_id],
+    (error, result) => {
+      if (error) {
+        console.log(error);
+        res.send(error);
+      } else {
+        console.log(result);
+        res.send("Status Updated Successfully!");
+      }
+    }
+  );
+});
+
+//Get status of survey
+
+app.get("/survey/:id",(req,res)=>{
+  const {id} = req.params
+  db.query('SELECT * FROM userSurvey WHERE id = ?',[id],(error,result) => {
+    if(error){
+      res.status(400).send(error)
+    }
+    else{
+      console.log(result)
+      if(result.length>0){
+      const formattedData = {...result[0],status:result[0]?.status.readInt8() ===1}
+      res.status(200).send(formattedData);
+      }
+      else{
+        res.status(400).send({msg:"Survey not found"})
+      }
+    }
+  })
+
+});
+
+
+
+
+
+
+ 
