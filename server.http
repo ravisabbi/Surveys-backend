@@ -49,10 +49,10 @@ Content-Type: application/json
 GET http://localhost:5000/getUserData
 
 ### get all surveys
-GET http://localhost:5000/userSurveys/3
+GET http://localhost:5000/userSurveys/4
 
 ### get surveys count and last 5'days data
-GET http://localhost:5000/getUserSurveysData/3
+GET http://localhost:5000/getUserSurveysData/15
 
 ### send survey
 POST http://localhost:5000/survey

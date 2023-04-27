@@ -245,8 +245,15 @@ app.get("/getUserData", (req, res) => {
         if (err) {
           res.status(500).send(err);
         } else {
+          let obj;
+          if(re.length>0){
+            obj = re[0]
+          }
+          else{
+            obj = {active_users,inactive_users}
+          }
           const data = {
-            status_count: re[0],
+            status_count: obj,
             user_data: result,
           };
           res.send(data);
@@ -317,9 +324,19 @@ GROUP BY
       db.query(completedAndInCompletedQurey, [id], (err, counts) => {
         if (err) res.status(400).send(err);
         else {
-          const { no_of_completed, no_of_incompleted } = counts[0];
+          let countObj;
+          if(counts.length>0){
+            countObj = counts[0]
+            //countObj = {no_of_completed:0,no_of_incompleted:0} 
+          }
+          else{
+            countObj = {no_of_completed:0,no_of_incompleted:0} 
+          }
+            
+           
+          //const { no_of_completed, no_of_incompleted } = counts[0];
           const resData = {
-            status_count: { no_of_completed, no_of_incompleted },
+            status_count:  countObj,
             user_survey_list: formattedData,
           };
 
